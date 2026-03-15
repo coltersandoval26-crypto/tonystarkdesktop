@@ -1,6 +1,6 @@
 # Tony Stark-Inspired Touch Desktop (PyQt6)
 
-A fun Tony-Stark-inspired touchscreen desktop interface that runs as a native application (not in a browser).
+A native Python + PyQt6 fullscreen HUD desktop with draggable futuristic panels, touch gestures, and mixed functional/aesthetic widgets.
 
 ## Install
 
@@ -14,16 +14,28 @@ pip install PyQt6 psutil
 python main.py
 ```
 
-## Controls
+## Included Panels
+
+- **System Panel**: live CPU and RAM utilization (updates every 1s)
+- **Notes Panel**: editable notes with auto-save
+- **Project Panel**: file/folder list from `workspace/projects`
+- **Diagnostics Panel**: OS, CPU, and RAM details
+- **Clock Panel**: live time and date
+- **Arc Reactor Panel**: round 5-finger interactive core (touch 5 points to ignite)
+- **Field Visualizer**: animated aesthetic waveform panel
+- **Ruler Panel**: sizeable on-screen ruler
+
+## Controls & Gestures
 
 - Launches in fullscreen automatically.
 - Press `Esc` to exit fullscreen.
 - Drag a panel by its top bar.
-- Double tap / double click the top bar to maximize/restore a panel.
-- Two-finger drag on the workspace moves all panels.
-- Pinch on a panel to scale it slightly.
+- Double tap / double click top bar to maximize/restore a panel.
+- Two-finger drag on workspace moves every panel.
+- Pinch on panel to scale slightly.
+- **Arc Reactor** panel responds to **5-finger touch**.
 
-## Runtime paths
+## Runtime Paths
 
-- `workspace/projects/` (project listing source)
-- `workspace/runtime/notes.txt` (auto-saved notes)
+- `workspace/projects/`
+- `workspace/runtime/notes.txt`

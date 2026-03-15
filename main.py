@@ -15,9 +15,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from panels.ambient_panel import AmbientPanel
+from panels.arc_reactor_panel import ArcReactorPanel
+from panels.clock_panel import ClockPanel
 from panels.diagnostics_panel import DiagnosticsPanel
 from panels.notes_panel import NotesPanel
 from panels.projects_panel import ProjectsPanel
+from panels.ruler_panel import RulerPanel
 from panels.system_panel import SystemPanel
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +55,7 @@ class HudPanel(QFrame):
         self.grabGesture(Qt.GestureType.PinchGesture)
 
         self._build_ui()
-        self._apply_glow(25)
+        self._apply_glow(26)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -61,10 +65,16 @@ class HudPanel(QFrame):
         self.header = QWidget(self)
         self.header.setObjectName("panelHeader")
         header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(12, 6, 12, 6)
+        header_layout.setContentsMargins(12, 7, 12, 7)
+
         title_label = QLabel(self.panel_title)
         title_label.setObjectName("panelTitle")
         header_layout.addWidget(title_label)
+        header_layout.addStretch()
+
+        indicator = QLabel("◉")
+        indicator.setStyleSheet("color: #00eaff;")
+        header_layout.addWidget(indicator)
 
         layout.addWidget(self.header)
         layout.addWidget(self.content_widget)
@@ -81,11 +91,18 @@ class HudPanel(QFrame):
         if not isinstance(effect, QGraphicsDropShadowEffect):
             return
         self.glow_animation = QPropertyAnimation(effect, b"blurRadius", self)
-        self.glow_animation.setDuration(180)
+        self.glow_animation.setDuration(160)
         self.glow_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.glow_animation.setStartValue(effect.blurRadius())
         self.glow_animation.setEndValue(target_radius)
         self.glow_animation.start()
+
+    def _animate_scale_bump(self, up: bool) -> None:
+        self.bump_anim = QPropertyAnimation(self, b"windowOpacity", self)
+        self.bump_anim.setDuration(140)
+        self.bump_anim.setStartValue(1.0)
+        self.bump_anim.setEndValue(0.92 if up else 1.0)
+        self.bump_anim.start()
 
     def _in_header(self, pos: QPoint) -> bool:
         return self.header.geometry().contains(pos)
@@ -97,7 +114,7 @@ class HudPanel(QFrame):
 
         if not self.is_maximized:
             self.restored_geometry = self.geometry()
-            target = parent.rect().adjusted(40, 40, -40, -40)
+            target = parent.rect().adjusted(30, 30, -30, -30)
             self.is_maximized = True
         else:
             target = self.restored_geometry
@@ -111,7 +128,7 @@ class HudPanel(QFrame):
         self.anim.start()
 
     def scale_panel(self, factor_delta: float) -> None:
-        new_factor = max(0.85, min(1.25, self.scale_factor * factor_delta))
+        new_factor = max(0.85, min(1.3, self.scale_factor * factor_delta))
         factor = new_factor / self.scale_factor
         self.scale_factor = new_factor
 
@@ -119,20 +136,15 @@ class HudPanel(QFrame):
         new_w = int(geo.width() * factor)
         new_h = int(geo.height() * factor)
         center = geo.center()
-        new_geo = QRect(
-            center.x() - new_w // 2,
-            center.y() - new_h // 2,
-            new_w,
-            new_h,
-        )
-        self.setGeometry(new_geo)
+        self.setGeometry(QRect(center.x() - new_w // 2, center.y() - new_h // 2, new_w, new_h))
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton and self._in_header(event.position().toPoint()):
             self.dragging = True
             self.drag_offset = event.position().toPoint()
             self.raise_()
-            self._animate_glow(40)
+            self._animate_glow(42)
+            self._animate_scale_bump(True)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -148,7 +160,8 @@ class HudPanel(QFrame):
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton and self.dragging:
             self.dragging = False
-            self._animate_glow(25)
+            self._animate_glow(26)
+            self._animate_scale_bump(False)
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -164,10 +177,7 @@ class HudPanel(QFrame):
         if event.type() == event.Type.Gesture:
             pinch = event.gesture(Qt.GestureType.PinchGesture)
             if pinch:
-                if pinch.scaleFactor() > 1.0:
-                    self.scale_panel(1.02)
-                else:
-                    self.scale_panel(0.98)
+                self.scale_panel(1.02 if pinch.scaleFactor() > 1.0 else 0.98)
                 return True
         return super().event(event)
 
@@ -185,26 +195,27 @@ class StarkDesktop(QMainWindow):
 
         root = QWidget()
         self.setCentralWidget(root)
-
-        self._build_panels(root)
         self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
 
+        self._build_panels(root)
+
     def _build_panels(self, parent: QWidget) -> None:
-        system_panel = HudPanel("System Panel", SystemPanel())
-        notes_panel = HudPanel("Notes Panel", NotesPanel(NOTES_FILE))
-        projects_panel = HudPanel("Project Panel", ProjectsPanel(PROJECTS_DIR))
-        diagnostics_panel = HudPanel("Diagnostics Panel", DiagnosticsPanel())
+        panel_specs = [
+            ("System Panel", SystemPanel(), QPoint(40, 50)),
+            ("Notes Panel", NotesPanel(NOTES_FILE), QPoint(430, 50)),
+            ("Project Panel", ProjectsPanel(PROJECTS_DIR), QPoint(820, 50)),
+            ("Diagnostics Panel", DiagnosticsPanel(), QPoint(1210, 50)),
+            ("Clock Panel", ClockPanel(), QPoint(40, 360)),
+            ("Arc Reactor", ArcReactorPanel(), QPoint(430, 360)),
+            ("Field Visualizer", AmbientPanel(), QPoint(820, 360)),
+            ("Ruler Panel", RulerPanel(), QPoint(1210, 360)),
+        ]
 
-        self.panels = [system_panel, notes_panel, projects_panel, diagnostics_panel]
-
-        for panel in self.panels:
-            panel.setParent(parent)
+        for title, content, position in panel_specs:
+            panel = HudPanel(title, content, parent)
+            panel.move(position)
             panel.show()
-
-        system_panel.move(60, 70)
-        notes_panel.move(460, 70)
-        projects_panel.move(60, 380)
-        diagnostics_panel.move(460, 380)
+            self.panels.append(panel)
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
         if event.key() == Qt.Key.Key_Escape:
@@ -246,30 +257,51 @@ class StarkDesktop(QMainWindow):
         return """
             QMainWindow, QWidget {
                 background-color: #05060a;
-                color: #d9fbff;
+                color: #dcfaff;
                 font-family: 'Segoe UI', Arial, sans-serif;
             }
             QFrame#hudPanel {
-                background: rgba(6, 14, 22, 170);
-                border: 1px solid #00eaff;
-                border-radius: 10px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                            stop:0 rgba(6, 12, 24, 210),
+                                            stop:1 rgba(4, 26, 34, 185));
+                border: 1px solid rgba(0, 234, 255, 190);
+                border-radius: 12px;
             }
             QWidget#panelHeader {
-                background: rgba(0, 234, 255, 25);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                            stop:0 rgba(0, 234, 255, 34),
+                                            stop:1 rgba(0, 130, 255, 20));
                 border-bottom: 1px solid rgba(0, 234, 255, 120);
-                border-top-left-radius: 10px;
-                border-top-right-radius: 10px;
+                border-top-left-radius: 11px;
+                border-top-right-radius: 11px;
             }
             QLabel#panelTitle {
                 color: #00eaff;
-                font-size: 15px;
-                font-weight: bold;
+                font-size: 14px;
+                font-weight: 700;
                 letter-spacing: 1px;
             }
-            QTextEdit, QListWidget, QLabel {
-                color: #bff8ff;
-                background: transparent;
-                border: none;
+            QLabel#panelSubtle {
+                color: rgba(165, 248, 255, 180);
+                font-size: 12px;
+            }
+            QTextEdit, QListWidget {
+                color: #c3f9ff;
+                background: rgba(0, 20, 30, 80);
+                border: 1px solid rgba(0, 234, 255, 55);
+                border-radius: 8px;
+                padding: 6px;
+            }
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: rgba(0, 234, 255, 45);
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                width: 14px;
+                margin: -4px 0;
+                background: #00eaff;
+                border-radius: 7px;
             }
         """
 
@@ -280,7 +312,6 @@ def main() -> None:
     app.setAttribute(Qt.ApplicationAttribute.AA_SynthesizeMouseForUnhandledTouchEvents, True)
 
     window = StarkDesktop()
-
     screen_geo = QGuiApplication.primaryScreen().availableGeometry()
     window.resize(screen_geo.width(), screen_geo.height())
     window.showFullScreen()
