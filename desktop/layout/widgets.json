@@ -1,0 +1,28 @@
+{
+  "widgets": [
+    {
+      "id": "arc-reactor-health",
+      "title": "Arc Reactor Core",
+      "refresh_seconds": 2,
+      "position": "top-left"
+    },
+    {
+      "id": "suit-telemetry",
+      "title": "Armor Telemetry",
+      "refresh_seconds": 1,
+      "position": "top-right"
+    },
+    {
+      "id": "global-threat-feed",
+      "title": "Threat Matrix",
+      "refresh_seconds": 10,
+      "position": "bottom-left"
+    },
+    {
+      "id": "jarvis-priority-queue",
+      "title": "JARVIS Priority Queue",
+      "refresh_seconds": 5,
+      "position": "bottom-right"
+    }
+  ]
+}

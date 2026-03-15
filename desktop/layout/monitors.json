@@ -1,0 +1,26 @@
+{
+  "primary_display": {
+    "name": "Main Tactical Glass",
+    "resolution": "5120x2880",
+    "position": "center"
+  },
+  "aux_displays": [
+    {
+      "name": "Engineering Left",
+      "resolution": "3440x1440",
+      "position": "left"
+    },
+    {
+      "name": "Telemetry Right",
+      "resolution": "3440x1440",
+      "position": "right"
+    },
+    {
+      "name": "Ceiling Projection",
+      "resolution": "3840x2160",
+      "position": "top"
+    }
+  ],
+  "input_mode": "voice-gesture-hybrid",
+  "color_profile": "stark-hud-amber"
+}

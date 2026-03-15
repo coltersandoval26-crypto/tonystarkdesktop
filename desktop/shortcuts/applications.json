@@ -1,0 +1,24 @@
+{
+  "shortcuts": [
+    {
+      "name": "JARVIS Console",
+      "command": "open jarvis://console",
+      "hotkey": "Ctrl+Alt+J"
+    },
+    {
+      "name": "Armor Lab",
+      "command": "open stark://armor-lab",
+      "hotkey": "Ctrl+Alt+A"
+    },
+    {
+      "name": "Satellite Feed",
+      "command": "open stark://orbital-feed",
+      "hotkey": "Ctrl+Alt+S"
+    },
+    {
+      "name": "Emergency Protocol",
+      "command": "open stark://protocol/house-party",
+      "hotkey": "Ctrl+Shift+P"
+    }
+  ]
+}

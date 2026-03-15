@@ -1,0 +1,25 @@
+:root {
+  --hud-bg: #05070d;
+  --hud-panel: rgba(13, 24, 40, 0.82);
+  --hud-line: #2d7de0;
+  --hud-accent: #f08c1a;
+  --hud-text: #d8f2ff;
+}
+
+body {
+  background: radial-gradient(circle at center, #0b1222, var(--hud-bg));
+  color: var(--hud-text);
+  font-family: "Rajdhani", "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.hud-panel {
+  background: var(--hud-panel);
+  border: 1px solid color-mix(in srgb, var(--hud-line), transparent 35%);
+  box-shadow: 0 0 18px rgba(45, 125, 224, 0.35);
+}
+
+.hud-accent {
+  color: var(--hud-accent);
+  text-transform: uppercase;
+}
