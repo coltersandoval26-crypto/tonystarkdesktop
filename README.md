@@ -18,9 +18,9 @@ python main.py
 
 On launch, the desktop starts in a biometric boot overlay.
 
-- Place **your hand (4+ touch points)** on the handprint to start initialization.
+- Tap the handprint once for fastest unlock, or place **your hand (4+ touch points)** to scan.
 - Keep contact briefly to unlock the full workspace.
-- Mouse fallback: click-and-hold on the handprint, or press **Use Mouse Demo Unlock**.
+- Mouse support: click handprint for instant unlock, or use **Unlock with Mouse (Instant)**.
 
 ## Included Panels
 
@@ -36,7 +36,7 @@ On launch, the desktop starts in a biometric boot overlay.
 ## Controls & Gestures
 
 - Launches in fullscreen automatically.
-- Press `Esc` to exit fullscreen.
+- Press `Esc` to exit fullscreen (app stays open).
 - Drag a panel by its top bar.
 - Double tap / double click top bar to maximize/restore a panel.
 - Two-finger drag on workspace moves every panel.
