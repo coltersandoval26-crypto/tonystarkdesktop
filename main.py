@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
@@ -414,27 +414,41 @@ class StarkDesktop(QMainWindow):
         for panel in self.panels:
             panel.hide()
 
-        self.unlock_overlay = HandprintUnlockOverlay(root)
+        self.unlock_overlay: Optional[HandprintUnlockOverlay] = HandprintUnlockOverlay(root)
         self.unlock_overlay.unlocked.connect(self._unlock_workspace)
         self.unlock_overlay.setGeometry(root.rect())
         self.unlock_overlay.show()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        if hasattr(self, "unlock_overlay"):
-            self.unlock_overlay.setGeometry(self.centralWidget().rect())
+        if self.unlock_overlay is not None:
+            try:
+                self.unlock_overlay.setGeometry(self.centralWidget().rect())
+            except RuntimeError:
+                self.unlock_overlay = None
 
     def _unlock_workspace(self) -> None:
         for panel in self.panels:
             panel.show()
+
+        if self.unlock_overlay is None:
+            return
+
         self.unlock_fx = QGraphicsOpacityEffect(self.unlock_overlay)
         self.unlock_overlay.setGraphicsEffect(self.unlock_fx)
         self.unlock_anim = QPropertyAnimation(self.unlock_fx, b"opacity", self)
         self.unlock_anim.setDuration(420)
         self.unlock_anim.setStartValue(1.0)
         self.unlock_anim.setEndValue(0.0)
-        self.unlock_anim.finished.connect(self.unlock_overlay.deleteLater)
+        self.unlock_anim.finished.connect(self._finalize_unlock_overlay)
         self.unlock_anim.start()
+
+    def _finalize_unlock_overlay(self) -> None:
+        if self.unlock_overlay is None:
+            return
+        self.unlock_overlay.hide()
+        self.unlock_overlay.deleteLater()
+        self.unlock_overlay = None
 
     def _build_panels(self, parent: QWidget) -> None:
         panel_specs = [
@@ -459,6 +473,11 @@ class StarkDesktop(QMainWindow):
             if self.isFullScreen():
                 self.showNormal()
             return
+
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_Q:
+            self.close()
+            return
+
         super().keyPressEvent(event)
 
     def event(self, event) -> bool:  # type: ignore[override]

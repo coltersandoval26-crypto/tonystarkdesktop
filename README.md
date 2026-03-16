@@ -37,6 +37,7 @@ On launch, the desktop starts in a biometric boot overlay.
 
 - Launches in fullscreen automatically.
 - Press `Esc` to exit fullscreen (app stays open).
+- Press `Ctrl+Q` to quit the app intentionally.
 - Drag a panel by its top bar.
 - Double tap / double click top bar to maximize/restore a panel.
 - Two-finger drag on workspace moves every panel.
