@@ -14,6 +14,14 @@ pip install PyQt6 psutil
 python main.py
 ```
 
+## Startup Biometric Flow
+
+On launch, the desktop starts in a biometric boot overlay.
+
+- Place **five fingers** on the handprint to start initialization.
+- Keep contact briefly to unlock the full workspace.
+- Mouse fallback: click-and-hold on the handprint to simulate scan.
+
 ## Included Panels
 
 - **System Panel**: live CPU and RAM utilization (updates every 1s)

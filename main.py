@@ -2,15 +2,17 @@ import os
 import sys
 from typing import List
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QProgressBar,
     QVBoxLayout,
     QWidget,
 )
@@ -36,6 +38,133 @@ def ensure_directories() -> None:
     os.makedirs(RUNTIME_DIR, exist_ok=True)
 
 
+class WorkspaceCanvas(QWidget):
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor("#05060a"))
+
+        grid_pen = QPen(QColor(0, 234, 255, 18), 1)
+        painter.setPen(grid_pen)
+        step = 34
+        for x in range(0, self.width(), step):
+            painter.drawLine(x, 0, x, self.height())
+        for y in range(0, self.height(), step):
+            painter.drawLine(0, y, self.width(), y)
+
+        painter.setPen(QPen(QColor(0, 234, 255, 40), 2))
+        painter.drawRect(self.rect().adjusted(9, 9, -9, -9))
+
+
+class HandprintUnlockOverlay(QWidget):
+    unlocked = pyqtSignal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("unlockOverlay")
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        self.armed = False
+        self.progress = 0
+
+        self.title = QLabel("BIOMETRIC START")
+        self.title.setObjectName("unlockTitle")
+
+        self.subtitle = QLabel("Place full hand on handprint (5 touch points) to initialize interface")
+        self.subtitle.setObjectName("unlockSubtle")
+        self.subtitle.setWordWrap(True)
+        self.subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.handprint = QLabel("🖐")
+        self.handprint.setObjectName("handGlyph")
+        self.handprint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.handprint.setFixedSize(220, 220)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(14)
+        container_layout.addStretch()
+        container_layout.addWidget(self.title, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.subtitle, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.handprint, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.progress_bar, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addStretch()
+        container.setMaximumWidth(720)
+
+        layout.addWidget(container, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.hold_timer = QTimer(self)
+        self.hold_timer.timeout.connect(self._tick_progress)
+        self.hold_timer.setInterval(60)
+
+    def _tick_progress(self) -> None:
+        self.progress = min(100, self.progress + 8)
+        self.progress_bar.setValue(self.progress)
+        if self.progress >= 100:
+            self.hold_timer.stop()
+            self.subtitle.setText("Identity confirmed. Loading tactical workspace...")
+            self.unlocked.emit()
+
+    def _start_arming(self) -> None:
+        if self.armed:
+            return
+        self.armed = True
+        self.progress = 0
+        self.progress_bar.setValue(0)
+        self.hold_timer.start()
+        self.handprint.setProperty("armed", True)
+        self.handprint.style().polish(self.handprint)
+
+    def _stop_arming(self) -> None:
+        if not self.armed:
+            return
+        self.armed = False
+        self.hold_timer.stop()
+        self.progress = 0
+        self.progress_bar.setValue(0)
+        self.handprint.setProperty("armed", False)
+        self.handprint.style().polish(self.handprint)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton and self.handprint.geometry().contains(event.position().toPoint()):
+            self.subtitle.setText("Hold handprint to simulate biometric scan")
+            self._start_arming()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._stop_arming()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def event(self, event) -> bool:  # type: ignore[override]
+        if event.type() in (event.Type.TouchBegin, event.Type.TouchUpdate):
+            touches = len(event.points())
+            if touches >= 5:
+                self.subtitle.setText("Five-finger contact detected. Keep steady...")
+                self._start_arming()
+                return True
+            self._stop_arming()
+
+        if event.type() in (event.Type.TouchEnd, event.Type.TouchCancel):
+            self._stop_arming()
+
+        return super().event(event)
+
+
 class HudPanel(QFrame):
     def __init__(self, title: str, content_widget: QWidget, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -55,7 +184,7 @@ class HudPanel(QFrame):
         self.grabGesture(Qt.GestureType.PinchGesture)
 
         self._build_ui()
-        self._apply_glow(26)
+        self._apply_glow(28)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -67,14 +196,17 @@ class HudPanel(QFrame):
         header_layout = QHBoxLayout(self.header)
         header_layout.setContentsMargins(12, 7, 12, 7)
 
+        left_tag = QLabel("▣")
+        left_tag.setObjectName("panelSubtle")
         title_label = QLabel(self.panel_title)
         title_label.setObjectName("panelTitle")
+        right_tag = QLabel("◉")
+        right_tag.setObjectName("panelLiveDot")
+
+        header_layout.addWidget(left_tag)
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-
-        indicator = QLabel("◉")
-        indicator.setStyleSheet("color: #00eaff;")
-        header_layout.addWidget(indicator)
+        header_layout.addWidget(right_tag)
 
         layout.addWidget(self.header)
         layout.addWidget(self.content_widget)
@@ -82,7 +214,7 @@ class HudPanel(QFrame):
     def _apply_glow(self, blur_radius: float) -> None:
         glow = QGraphicsDropShadowEffect(self)
         glow.setBlurRadius(blur_radius)
-        glow.setColor(Qt.GlobalColor.cyan)
+        glow.setColor(QColor(0, 234, 255, 170))
         glow.setOffset(0, 0)
         self.setGraphicsEffect(glow)
 
@@ -91,18 +223,11 @@ class HudPanel(QFrame):
         if not isinstance(effect, QGraphicsDropShadowEffect):
             return
         self.glow_animation = QPropertyAnimation(effect, b"blurRadius", self)
-        self.glow_animation.setDuration(160)
+        self.glow_animation.setDuration(170)
         self.glow_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.glow_animation.setStartValue(effect.blurRadius())
         self.glow_animation.setEndValue(target_radius)
         self.glow_animation.start()
-
-    def _animate_scale_bump(self, up: bool) -> None:
-        self.bump_anim = QPropertyAnimation(self, b"windowOpacity", self)
-        self.bump_anim.setDuration(140)
-        self.bump_anim.setStartValue(1.0)
-        self.bump_anim.setEndValue(0.92 if up else 1.0)
-        self.bump_anim.start()
 
     def _in_header(self, pos: QPoint) -> bool:
         return self.header.geometry().contains(pos)
@@ -114,7 +239,7 @@ class HudPanel(QFrame):
 
         if not self.is_maximized:
             self.restored_geometry = self.geometry()
-            target = parent.rect().adjusted(30, 30, -30, -30)
+            target = parent.rect().adjusted(24, 24, -24, -24)
             self.is_maximized = True
         else:
             target = self.restored_geometry
@@ -143,8 +268,7 @@ class HudPanel(QFrame):
             self.dragging = True
             self.drag_offset = event.position().toPoint()
             self.raise_()
-            self._animate_glow(42)
-            self._animate_scale_bump(True)
+            self._animate_glow(44)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -160,8 +284,7 @@ class HudPanel(QFrame):
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton and self.dragging:
             self.dragging = False
-            self._animate_glow(26)
-            self._animate_scale_bump(False)
+            self._animate_glow(28)
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -193,11 +316,35 @@ class StarkDesktop(QMainWindow):
         self.touch_last_center: QPoint | None = None
         self.panels: List[HudPanel] = []
 
-        root = QWidget()
+        root = WorkspaceCanvas()
         self.setCentralWidget(root)
         self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
 
         self._build_panels(root)
+        for panel in self.panels:
+            panel.hide()
+
+        self.unlock_overlay = HandprintUnlockOverlay(root)
+        self.unlock_overlay.unlocked.connect(self._unlock_workspace)
+        self.unlock_overlay.setGeometry(root.rect())
+        self.unlock_overlay.show()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        if hasattr(self, "unlock_overlay"):
+            self.unlock_overlay.setGeometry(self.centralWidget().rect())
+
+    def _unlock_workspace(self) -> None:
+        for panel in self.panels:
+            panel.show()
+        self.unlock_fx = QGraphicsOpacityEffect(self.unlock_overlay)
+        self.unlock_overlay.setGraphicsEffect(self.unlock_fx)
+        self.unlock_anim = QPropertyAnimation(self.unlock_fx, b"opacity", self)
+        self.unlock_anim.setDuration(420)
+        self.unlock_anim.setStartValue(1.0)
+        self.unlock_anim.setEndValue(0.0)
+        self.unlock_anim.finished.connect(self.unlock_overlay.deleteLater)
+        self.unlock_anim.start()
 
     def _build_panels(self, parent: QWidget) -> None:
         panel_specs = [
@@ -262,16 +409,16 @@ class StarkDesktop(QMainWindow):
             }
             QFrame#hudPanel {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                                            stop:0 rgba(6, 12, 24, 210),
-                                            stop:1 rgba(4, 26, 34, 185));
-                border: 1px solid rgba(0, 234, 255, 190);
+                                            stop:0 rgba(8, 16, 30, 216),
+                                            stop:1 rgba(3, 27, 35, 192));
+                border: 1px solid rgba(0, 234, 255, 175);
                 border-radius: 12px;
             }
             QWidget#panelHeader {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                            stop:0 rgba(0, 234, 255, 34),
-                                            stop:1 rgba(0, 130, 255, 20));
-                border-bottom: 1px solid rgba(0, 234, 255, 120);
+                                            stop:0 rgba(0, 234, 255, 38),
+                                            stop:1 rgba(0, 132, 255, 19));
+                border-bottom: 1px solid rgba(0, 234, 255, 130);
                 border-top-left-radius: 11px;
                 border-top-right-radius: 11px;
             }
@@ -281,16 +428,34 @@ class StarkDesktop(QMainWindow):
                 font-weight: 700;
                 letter-spacing: 1px;
             }
+            QLabel#panelLiveDot {
+                color: rgba(0, 234, 255, 210);
+                font-size: 12px;
+            }
             QLabel#panelSubtle {
-                color: rgba(165, 248, 255, 180);
+                color: rgba(168, 250, 255, 190);
                 font-size: 12px;
             }
             QTextEdit, QListWidget {
                 color: #c3f9ff;
-                background: rgba(0, 20, 30, 80);
-                border: 1px solid rgba(0, 234, 255, 55);
+                background: rgba(0, 20, 30, 90);
+                border: 1px solid rgba(0, 234, 255, 65);
                 border-radius: 8px;
                 padding: 6px;
+            }
+            QProgressBar {
+                border: 1px solid rgba(0, 234, 255, 120);
+                border-radius: 6px;
+                background: rgba(0, 15, 22, 180);
+                min-width: 320px;
+                max-width: 320px;
+                min-height: 12px;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                            stop:0 #00eaff,
+                                            stop:1 #7fffff);
             }
             QSlider::groove:horizontal {
                 height: 6px;
@@ -302,6 +467,34 @@ class StarkDesktop(QMainWindow):
                 margin: -4px 0;
                 background: #00eaff;
                 border-radius: 7px;
+            }
+            QWidget#unlockOverlay {
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.9,
+                                            fx:0.5, fy:0.5,
+                                            stop:0 rgba(3, 24, 32, 225),
+                                            stop:1 rgba(0, 0, 0, 238));
+            }
+            QLabel#unlockTitle {
+                color: #00eaff;
+                font-size: 30px;
+                font-weight: 700;
+                letter-spacing: 3px;
+            }
+            QLabel#unlockSubtle {
+                color: rgba(179, 250, 255, 200);
+                font-size: 13px;
+            }
+            QLabel#handGlyph {
+                border: 2px solid rgba(0, 234, 255, 170);
+                background: rgba(0, 234, 255, 18);
+                border-radius: 110px;
+                color: #bfffff;
+                font-size: 120px;
+            }
+            QLabel#handGlyph[armed="true"] {
+                background: rgba(0, 234, 255, 42);
+                border: 2px solid rgba(130, 255, 255, 220);
+                color: #f3ffff;
             }
         """
 
