@@ -57,6 +57,62 @@ class WorkspaceCanvas(QWidget):
         painter.drawRect(self.rect().adjusted(9, 9, -9, -9))
 
 
+
+
+class BiometricHandWidget(QWidget):
+    finger_pressed = pyqtSignal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("biometricHand")
+        self.setFixedSize(320, 360)
+
+        self.palm_core = QLabel("PALM")
+        self.palm_core.setObjectName("palmCore")
+        self.palm_core.setParent(self)
+        self.palm_core.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.finger_buttons: list[QPushButton] = []
+        for index in range(5):
+            button = QPushButton(str(index + 1), self)
+            button.setObjectName("fingerTarget")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(lambda _checked=False, i=index: self.finger_pressed.emit(i))
+            self.finger_buttons.append(button)
+
+        self._layout_targets()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._layout_targets()
+
+    def _layout_targets(self) -> None:
+        points = [
+            (38, 66),   # thumb
+            (96, 24),   # index
+            (146, 14),  # middle
+            (196, 24),  # ring
+            (246, 52),  # pinky
+        ]
+        for button, (x, y) in zip(self.finger_buttons, points):
+            button.setGeometry(x, y, 38, 38)
+
+        self.palm_core.setGeometry(90, 120, 140, 176)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        painter.setBrush(QColor(0, 234, 255, 24))
+        painter.setPen(QPen(QColor(0, 234, 255, 120), 2))
+
+        painter.drawRoundedRect(92, 116, 136, 180, 58, 58)
+        painter.drawRoundedRect(38, 90, 38, 118, 16, 16)
+        painter.drawRoundedRect(102, 42, 30, 88, 15, 15)
+        painter.drawRoundedRect(144, 32, 30, 96, 15, 15)
+        painter.drawRoundedRect(186, 42, 30, 88, 15, 15)
+        painter.drawRoundedRect(228, 74, 30, 74, 15, 15)
+
 class HandprintUnlockOverlay(QWidget):
     unlocked = pyqtSignal()
 
@@ -69,30 +125,29 @@ class HandprintUnlockOverlay(QWidget):
         self.armed = False
         self.progress = 0
         self.unlocked_once = False
+        self.finger_hits: set[int] = set()
 
         self.title = QLabel("BIOMETRIC START")
         self.title.setObjectName("unlockTitle")
 
-        self.subtitle = QLabel("Tap handprint once, or place hand (4+ touch points), to initialize interface")
+        self.subtitle = QLabel("Tap each finger target (1–5) or place hand (4+ touch points) to initialize")
         self.subtitle.setObjectName("unlockSubtle")
         self.subtitle.setWordWrap(True)
         self.subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.handprint = QLabel("🖐")
-        self.handprint.setObjectName("handGlyph")
-        self.handprint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.handprint.setFixedSize(220, 220)
+        self.hand_widget = BiometricHandWidget()
+        self.hand_widget.finger_pressed.connect(self._on_finger_pressed)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
 
-        self.hint = QLabel("Quick start: tap the handprint once")
+        self.hint = QLabel("Quick start: tap all 5 finger targets")
         self.hint.setObjectName("unlockHint")
         self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.demo_button = QPushButton("Unlock with Mouse (Instant)")
+        self.demo_button = QPushButton("Skip Scan (Instant Unlock)")
         self.demo_button.setObjectName("unlockButton")
         self.demo_button.clicked.connect(self._trigger_demo_unlock)
 
@@ -106,7 +161,7 @@ class HandprintUnlockOverlay(QWidget):
         container_layout.addStretch()
         container_layout.addWidget(self.title, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.subtitle, alignment=Qt.AlignmentFlag.AlignCenter)
-        container_layout.addWidget(self.handprint, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.hand_widget, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.progress_bar, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.hint, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.demo_button, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -150,6 +205,12 @@ class HandprintUnlockOverlay(QWidget):
         self.progress = max(0, self.progress - 3)
         self.progress_bar.setValue(self.progress)
 
+    def _on_finger_pressed(self, finger_index: int) -> None:
+        self.finger_hits.add(finger_index)
+        self.hint.setText(f"Finger targets touched: {len(self.finger_hits)}/5")
+        if len(self.finger_hits) >= 5:
+            self._unlock_once("Finger map confirmed. Loading tactical workspace...")
+
     def _trigger_demo_unlock(self) -> None:
         self._unlock_once("Demo unlock initiated. Loading tactical workspace...")
 
@@ -159,9 +220,7 @@ class HandprintUnlockOverlay(QWidget):
         self.armed = True
         self.decay_timer.stop()
         self.hold_timer.start()
-        self.hint.setText("Scanning... hold briefly (or tap button for instant unlock)")
-        self.handprint.setProperty("armed", True)
-        self.handprint.style().polish(self.handprint)
+        self.hint.setText("Scanning... keep your hand steady")
 
     def _stop_arming(self) -> None:
         if not self.armed:
@@ -170,12 +229,10 @@ class HandprintUnlockOverlay(QWidget):
         self.hold_timer.stop()
         self.hint.setText("Release detected. Progress will slowly fade — continue holding to unlock")
         self.decay_timer.start()
-        self.handprint.setProperty("armed", False)
-        self.handprint.style().polish(self.handprint)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
-        if event.button() == Qt.MouseButton.LeftButton and self.handprint.geometry().contains(event.position().toPoint()):
-            self._unlock_once("Handprint accepted. Loading tactical workspace...")
+        if event.button() == Qt.MouseButton.LeftButton and self.hand_widget.geometry().contains(event.position().toPoint()):
+            self.hint.setText("Tap the numbered finger targets for guided unlock")
             event.accept()
             return
         super().mousePressEvent(event)
@@ -530,17 +587,30 @@ class StarkDesktop(QMainWindow):
             QPushButton#unlockButton:hover {
                 background: rgba(0, 234, 255, 55);
             }
-            QLabel#handGlyph {
-                border: 2px solid rgba(0, 234, 255, 170);
-                background: rgba(0, 234, 255, 18);
-                border-radius: 110px;
-                color: #bfffff;
-                font-size: 120px;
+            QWidget#biometricHand {
+                background: rgba(0, 0, 0, 0);
             }
-            QLabel#handGlyph[armed="true"] {
-                background: rgba(0, 234, 255, 42);
-                border: 2px solid rgba(130, 255, 255, 220);
-                color: #f3ffff;
+            QLabel#palmCore {
+                border: 1px solid rgba(0, 234, 255, 120);
+                background: rgba(0, 234, 255, 16);
+                border-radius: 42px;
+                color: rgba(193, 252, 255, 170);
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 1px;
+            }
+            QPushButton#fingerTarget {
+                border: 1px solid rgba(0, 234, 255, 180);
+                background: rgba(0, 234, 255, 30);
+                color: #dcfeff;
+                border-radius: 19px;
+                font-weight: 700;
+            }
+            QPushButton#fingerTarget:hover {
+                background: rgba(0, 234, 255, 58);
+            }
+            QPushButton#fingerTarget:pressed {
+                background: rgba(120, 255, 255, 120);
             }
         """
 

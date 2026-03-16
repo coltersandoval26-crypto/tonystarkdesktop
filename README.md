@@ -18,9 +18,9 @@ python main.py
 
 On launch, the desktop starts in a biometric boot overlay.
 
-- Tap the handprint once for fastest unlock, or place **your hand (4+ touch points)** to scan.
+- Tap the numbered finger targets on the large hand guide, or place **your hand (4+ touch points)** to scan.
 - Keep contact briefly to unlock the full workspace.
-- Mouse support: click handprint for instant unlock, or use **Unlock with Mouse (Instant)**.
+- Mouse support: tap the finger targets for guided unlock, or use **Skip Scan (Instant Unlock)**.
 
 ## Included Panels
 
