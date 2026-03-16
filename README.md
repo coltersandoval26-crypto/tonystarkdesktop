@@ -18,9 +18,9 @@ python main.py
 
 On launch, the desktop starts in a biometric boot overlay.
 
-- Place **five fingers** on the handprint to start initialization.
+- Place **your hand (4+ touch points)** on the handprint to start initialization.
 - Keep contact briefly to unlock the full workspace.
-- Mouse fallback: click-and-hold on the handprint to simulate scan.
+- Mouse fallback: click-and-hold on the handprint, or press **Use Mouse Demo Unlock**.
 
 ## Included Panels
 

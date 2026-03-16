@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QProgressBar,
     QVBoxLayout,
     QWidget,
@@ -71,7 +72,7 @@ class HandprintUnlockOverlay(QWidget):
         self.title = QLabel("BIOMETRIC START")
         self.title.setObjectName("unlockTitle")
 
-        self.subtitle = QLabel("Place full hand on handprint (5 touch points) to initialize interface")
+        self.subtitle = QLabel("Place full hand on handprint (4+ touch points) to initialize interface")
         self.subtitle.setObjectName("unlockSubtle")
         self.subtitle.setWordWrap(True)
         self.subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -86,6 +87,14 @@ class HandprintUnlockOverlay(QWidget):
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
 
+        self.hint = QLabel("Quick start: hold 🖐 for ~1 second")
+        self.hint.setObjectName("unlockHint")
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.demo_button = QPushButton("Use Mouse Demo Unlock")
+        self.demo_button.setObjectName("unlockButton")
+        self.demo_button.clicked.connect(self._trigger_demo_unlock)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -98,6 +107,8 @@ class HandprintUnlockOverlay(QWidget):
         container_layout.addWidget(self.subtitle, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.handprint, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.progress_bar, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.hint, alignment=Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.demo_button, alignment=Qt.AlignmentFlag.AlignCenter)
         container_layout.addStretch()
         container.setMaximumWidth(720)
 
@@ -105,23 +116,43 @@ class HandprintUnlockOverlay(QWidget):
 
         self.hold_timer = QTimer(self)
         self.hold_timer.timeout.connect(self._tick_progress)
-        self.hold_timer.setInterval(60)
+        self.hold_timer.setInterval(55)
+
+        self.decay_timer = QTimer(self)
+        self.decay_timer.setInterval(50)
+        self.decay_timer.timeout.connect(self._decay_progress)
 
     def _tick_progress(self) -> None:
-        self.progress = min(100, self.progress + 8)
+        self.progress = min(100, self.progress + 10)
         self.progress_bar.setValue(self.progress)
         if self.progress >= 100:
             self.hold_timer.stop()
             self.subtitle.setText("Identity confirmed. Loading tactical workspace...")
             self.unlocked.emit()
 
+
+    def _decay_progress(self) -> None:
+        if self.armed:
+            return
+        if self.progress <= 0:
+            self.decay_timer.stop()
+            return
+        self.progress = max(0, self.progress - 3)
+        self.progress_bar.setValue(self.progress)
+
+    def _trigger_demo_unlock(self) -> None:
+        self.subtitle.setText("Demo unlock initiated. Loading tactical workspace...")
+        self.progress = 100
+        self.progress_bar.setValue(100)
+        self.unlocked.emit()
+
     def _start_arming(self) -> None:
         if self.armed:
             return
         self.armed = True
-        self.progress = 0
-        self.progress_bar.setValue(0)
+        self.decay_timer.stop()
         self.hold_timer.start()
+        self.hint.setText("Great — keep holding until bar is full")
         self.handprint.setProperty("armed", True)
         self.handprint.style().polish(self.handprint)
 
@@ -130,8 +161,8 @@ class HandprintUnlockOverlay(QWidget):
             return
         self.armed = False
         self.hold_timer.stop()
-        self.progress = 0
-        self.progress_bar.setValue(0)
+        self.hint.setText("Release detected. Progress will slowly fade — continue holding to unlock")
+        self.decay_timer.start()
         self.handprint.setProperty("armed", False)
         self.handprint.style().polish(self.handprint)
 
@@ -153,8 +184,8 @@ class HandprintUnlockOverlay(QWidget):
     def event(self, event) -> bool:  # type: ignore[override]
         if event.type() in (event.Type.TouchBegin, event.Type.TouchUpdate):
             touches = len(event.points())
-            if touches >= 5:
-                self.subtitle.setText("Five-finger contact detected. Keep steady...")
+            if touches >= 4:
+                self.subtitle.setText("Hand contact detected. Keep steady...")
                 self._start_arming()
                 return True
             self._stop_arming()
@@ -483,6 +514,20 @@ class StarkDesktop(QMainWindow):
             QLabel#unlockSubtle {
                 color: rgba(179, 250, 255, 200);
                 font-size: 13px;
+            }
+            QLabel#unlockHint {
+                color: rgba(220, 255, 255, 180);
+                font-size: 12px;
+            }
+            QPushButton#unlockButton {
+                color: #ccfbff;
+                background: rgba(0, 234, 255, 30);
+                border: 1px solid rgba(0, 234, 255, 120);
+                border-radius: 8px;
+                padding: 6px 14px;
+            }
+            QPushButton#unlockButton:hover {
+                background: rgba(0, 234, 255, 55);
             }
             QLabel#handGlyph {
                 border: 2px solid rgba(0, 234, 255, 170);
